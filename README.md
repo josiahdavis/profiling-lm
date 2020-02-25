@@ -1,6 +1,6 @@
 # PyTorch Language Model
 
-Simple language model in PyTorch.
+Simple language model reference in PyTorch.
 
 ## References
 
