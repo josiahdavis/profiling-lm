@@ -1,6 +1,6 @@
 # Profiling a PyTorch Language Model with pyprof
 
-Simple language model reference in PyTorch.
+Simple reference for profiling language model in PyTorch.
 
 ## References
 
