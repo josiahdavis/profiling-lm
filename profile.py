@@ -3,13 +3,17 @@ import argparse
 import time
 import math
 import os
+from io import open
+
+# import data
+# import model
+
 import torch
 import torch.nn as nn
-import data
-import model
-
+import torch.nn.functional as F
 import torch.cuda.profiler as profiler
 import torch.optim as optim
+
 from apex import pyprof
 
 pyprof.nvtx.init()
@@ -67,7 +71,54 @@ print(f"Running on device {device}")
 # Load data
 ###############################################################################
 
-corpus = data.Corpus(args.data)
+
+class Dictionary(object):
+    def __init__(self):
+        self.word2idx = {}
+        self.idx2word = []
+
+    def add_word(self, word):
+        if word not in self.word2idx:
+            self.idx2word.append(word)
+            self.word2idx[word] = len(self.idx2word) - 1
+        return self.word2idx[word]
+
+    def __len__(self):
+        return len(self.idx2word)
+
+
+class Corpus(object):
+    def __init__(self, path):
+        self.dictionary = Dictionary()
+        self.train = self.tokenize(os.path.join(path, "train.txt"))
+        self.valid = self.tokenize(os.path.join(path, "valid.txt"))
+        self.test = self.tokenize(os.path.join(path, "test.txt"))
+
+    def tokenize(self, path):
+        """Tokenizes a text file."""
+        assert os.path.exists(path)
+        # Add words to the dictionary
+        with open(path, "r", encoding="utf8") as f:
+            for line in f:
+                words = line.split() + ["<eos>"]
+                for word in words:
+                    self.dictionary.add_word(word)
+
+        # Tokenize file content
+        with open(path, "r", encoding="utf8") as f:
+            idss = []
+            for line in f:
+                words = line.split() + ["<eos>"]
+                ids = []
+                for word in words:
+                    ids.append(self.dictionary.word2idx[word])
+                idss.append(torch.tensor(ids).type(torch.int64))
+            ids = torch.cat(idss)
+
+        return ids
+
+
+corpus = Corpus(args.data)
 
 # Starting from sequential data, batchify arranges the dataset into columns.
 # For instance, with the alphabet as the sequence and batch size 4, we'd get
@@ -104,12 +155,66 @@ print(f"test_data.shape={test_data.shape}")
 # Build the model
 ###############################################################################
 
-ntokens = len(corpus.dictionary)
-model = model.TransformerModel(
-    ntokens, args.emsize, args.nhead, args.nhid, args.nlayers, args.bptt, args.dropout
-).to(device)
-criterion = nn.CrossEntropyLoss()
 
+class TransformerModel(nn.Module):
+    def __init__(self, ntoken, ninp, nhead, nhid, nlayers, seq_len, dropout=0.5):
+        super(TransformerModel, self).__init__()
+        self.src_mask = None
+        encoder_layers = nn.TransformerEncoderLayer(ninp, nhead, nhid, dropout)
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, nlayers)
+        self.position_embeddings = nn.Embedding(seq_len, ninp)
+        self.word_embeddings = nn.Embedding(ntoken, ninp)
+        self.ninp = ninp
+        self.decoder = nn.Linear(ninp, ntoken)
+        self.init_weights()
+        position = torch.arange(0, seq_len).unsqueeze(1)
+        self.register_buffer("position", position)
+        self.dropout = nn.Dropout(p=dropout)
+
+    def _generate_square_subsequent_mask(self, sz):
+        mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
+        mask = (
+            mask.float()
+            .masked_fill(mask == 0, float("-inf"))
+            .masked_fill(mask == 1, float(0.0))
+        )
+        return mask
+
+    def init_weights(self):
+        initrange = 0.1
+        self.word_embeddings.weight.data.uniform_(-initrange, initrange)
+        self.position_embeddings.weight.data.uniform_(-initrange, initrange)
+        self.decoder.bias.data.zero_()
+        self.decoder.weight.data.uniform_(-initrange, initrange)
+
+    def forward(self, src, has_mask=True):
+        if has_mask:
+            device = src.device
+            if self.src_mask is None or self.src_mask.size(0) != len(src):
+                mask = self._generate_square_subsequent_mask(len(src)).to(device)
+                self.src_mask = mask
+        else:
+            self.src_mask = None
+
+        word_embeddings = self.word_embeddings(src) * math.sqrt(self.ninp)
+        position = self.position[: src.size(0), :]
+        position_embeddings = self.position_embeddings(position)
+        src = self.dropout(word_embeddings + position_embeddings)
+        output = self.transformer_encoder(src, self.src_mask)
+        output = self.decoder(output)
+        return F.log_softmax(output, dim=-1)
+
+
+ntokens = len(corpus.dictionary)
+print(f"ntokens={ntokens}")
+# model = model.TransformerModel(
+model = TransformerModel(
+    ntokens, args.emsize, args.nhead, args.nhid, args.nlayers, args.bptt, args.dropout
+).cuda()
+# ).to(device)
+print(model)
+criterion = nn.CrossEntropyLoss()
+print(criterion)
 print(f"Using tokens={ntokens}, emsize={args.emsize}, nhid={args.emsize}")
 print(
     f"""ntokens={ntokens}, emsize={args.emsize}, 
@@ -153,7 +258,7 @@ def evaluate(data_source):
     return total_loss / (len(data_source) - 1)
 
 
-iter_to_capture = 2
+iter_to_capture = 1
 
 
 # Loop over epochs.
@@ -170,6 +275,7 @@ with torch.autograd.profiler.emit_nvtx():
         start_time = time.time()
         ntokens = len(corpus.dictionary)
         for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
+            print(f"batch: {batch}")
             data, targets = get_batch(train_data, i)
             # TODO: Use language modelling abstraction with torchtext
             model.zero_grad()
@@ -213,8 +319,6 @@ with torch.autograd.profiler.emit_nvtx():
     print("-" * 89)
     # Save the model if the validation loss is the best we've seen so far.
     if not best_val_loss or val_loss < best_val_loss:
-        with open(args.save, "wb") as f:
-            torch.save(model, f)
         best_val_loss = val_loss
     else:
         # Anneal the learning rate if no improvement has been seen in the validation dataset.
