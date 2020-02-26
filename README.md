@@ -1,4 +1,4 @@
-# PyTorch Language Model
+# Profiling a PyTorch Language Model with pyprof
 
 Simple language model reference in PyTorch.
 
