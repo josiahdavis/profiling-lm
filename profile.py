@@ -7,19 +7,17 @@ from io import open
 
 # import data
 # import model
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.cuda.profiler as profiler
 import torch.optim as optim
-
 from apex import pyprof
 
 pyprof.nvtx.init()
 
 parser = argparse.ArgumentParser(
-    description="PyTorch Wikitext-2 RNN/LSTM Language Model"
+    description="PyTorch Wikitext-2 Transformer Language Model"
 )
 parser.add_argument(
     "--data", type=str, default="./data/wikitext-2", help="location of the data corpus"
@@ -275,7 +273,6 @@ with torch.autograd.profiler.emit_nvtx():
         start_time = time.time()
         ntokens = len(corpus.dictionary)
         for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
-            print(f"batch: {batch}")
             data, targets = get_batch(train_data, i)
             # TODO: Use language modelling abstraction with torchtext
             model.zero_grad()
@@ -308,21 +305,21 @@ with torch.autograd.profiler.emit_nvtx():
                 )
                 total_loss = 0
                 start_time = time.time()
-    val_loss = evaluate(val_data)
-    print("-" * 89)
-    print(
-        "| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | "
-        "valid ppl {:8.2f}".format(
-            epoch, (time.time() - epoch_start_time), val_loss, math.exp(val_loss)
+        val_loss = evaluate(val_data)
+        print("-" * 89)
+        print(
+            "| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | "
+            "valid ppl {:8.2f}".format(
+                epoch, (time.time() - epoch_start_time), val_loss, math.exp(val_loss)
+            )
         )
-    )
-    print("-" * 89)
-    # Save the model if the validation loss is the best we've seen so far.
-    if not best_val_loss or val_loss < best_val_loss:
-        best_val_loss = val_loss
-    else:
-        # Anneal the learning rate if no improvement has been seen in the validation dataset.
-        lr /= 4.0
+        print("-" * 89)
+        # Save the model if the validation loss is the best we've seen so far.
+        if not best_val_loss or val_loss < best_val_loss:
+            best_val_loss = val_loss
+        else:
+            # Anneal the learning rate if no improvement has been seen in the validation dataset.
+            lr /= 4.0
 
 # Run on test data.
 test_loss = evaluate(test_data)
