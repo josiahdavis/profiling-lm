@@ -10,6 +10,9 @@ python3 -m venv josiah
 source josiah/bin/activate
 ```
 2. Install CUDA 10.1 ([link](https://developer.nvidia.com/cuda-10.1-download-archive-base?target_os=Linux&target_arch=x86_64&target_distro=Ubuntu&target_version=1804&target_type=runfilelocal))
+
+(getting errors with CUDA 10.2).
+
 3. Install apex ([link](https://github.com/NVIDIA/apex))
 
 ```
