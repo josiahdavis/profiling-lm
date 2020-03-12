@@ -149,14 +149,19 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--data", type=str, default="./data/wikitext-2", help="location of the data corpus"
 )
-parser.add_argument("--emsize", type=int, default=200, help="size of word embeddings")
 parser.add_argument(
-    "--nhid", type=int, default=200, help="number of hidden units per layer"
+    "--emsize", type=int, default=200, help="size of word embeddings (also, d_model)",
 )
-parser.add_argument("--nlayers", type=int, default=2, help="number of layers")
+parser.add_argument(
+    "--nhid",
+    type=int,
+    default=200,
+    help="number of hidden units per layer (e.g., dim_feedforward)",
+)
+parser.add_argument("--nlayers", type=int, default=1, help="number of layers")
 parser.add_argument("--lr", type=float, default=20, help="initial learning rate")
 parser.add_argument("--clip", type=float, default=0.25, help="gradient clipping")
-parser.add_argument("--epochs", type=int, default=40, help="upper epoch limit")
+parser.add_argument("--epochs", type=int, default=1, help="upper epoch limit")
 parser.add_argument(
     "--batch_size", type=int, default=20, metavar="N", help="batch size"
 )
@@ -183,8 +188,8 @@ parser.add_argument(
 parser.add_argument(
     "--nhead",
     type=int,
-    default=2,
-    help="the number of heads in the encoder/decoder of the transformer model",
+    default=1,
+    help="the number of heads in the encoder of the transformer model",
 )
 
 

@@ -27,7 +27,7 @@ pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="--cud
 5. Profile using pyprof ([link](https://github.com/NVIDIA/apex/tree/master/apex/pyprof)). e.g.,
 
 ```
-nvprof -f -o net.sql --profile-from-start off -- python language-modeling.py
+nvprof -f -o net.sql --profile-from-start off -- python language-model.py
 python -m apex.pyprof.parse net.sql > net.dict
 python -m apex.pyprof.prof -w 100 -c kernel,op,sil,tc,flops,bytes,device,stream,block,grid net.dict
 python -m apex.pyprof.prof --csv -c kernel,mod,op,dir,sil,tc,flops,bytes,device,stream,block,grid net.dict > lm.csv
