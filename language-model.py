@@ -14,7 +14,8 @@ import torch.cuda.profiler as profiler
 import torch.optim as optim
 from apex import pyprof
 
-#pyprof.nvtx.init()
+# pyprof.nvtx.init()
+
 
 class Dictionary(object):
     def __init__(self):
@@ -60,6 +61,7 @@ class Corpus(object):
             ids = torch.cat(idss)
 
         return ids
+
 
 class TransformerModel(nn.Module):
     def __init__(self, ntoken, ninp, nhead, nhid, nlayers, seq_len, dropout=0.5):
@@ -109,6 +111,7 @@ class TransformerModel(nn.Module):
         output = self.decoder(output)
         return F.log_softmax(output, dim=-1)
 
+
 def batchify(data, bsz, device):
     # Work out how cleanly we can divide the dataset into bsz parts.
     nbatch = data.size(0) // bsz
@@ -118,6 +121,7 @@ def batchify(data, bsz, device):
     data = data.view(bsz, -1).t().contiguous()
     return data.to(device)
 
+
 def get_batch(source, i, args):
     seq_len = min(args.bptt, len(source) - 1 - i)
     data = source[i : i + seq_len]
@@ -125,7 +129,7 @@ def get_batch(source, i, args):
     return data, target
 
 
-def evaluate(data_source, args):
+def evaluate(model, data_source, corpus, criterion, args):
     # Turn on evaluation mode which disables dropout.
     model.eval()
     total_loss = 0.0
@@ -183,6 +187,7 @@ parser.add_argument(
     help="the number of heads in the encoder/decoder of the transformer model",
 )
 
+
 def main():
 
     args = parser.parse_args()
@@ -192,9 +197,9 @@ def main():
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Running on device {device}")
-    
+
     corpus = Corpus(args.data)
-    
+
     eval_batch_size = 10
     train_data = batchify(corpus.train, args.batch_size, device)
     val_data = batchify(corpus.valid, eval_batch_size, device)
@@ -202,12 +207,18 @@ def main():
     print(f"train_data.shape={train_data.shape}")
     print(f"val_data.shape={val_data.shape}")
     print(f"test_data.shape={test_data.shape}")
-    
+
     ntokens = len(corpus.dictionary)
     print(f"ntokens={ntokens}")
     # model = model.TransformerModel(
     model = TransformerModel(
-        ntokens, args.emsize, args.nhead, args.nhid, args.nlayers, args.bptt, args.dropout
+        ntokens,
+        args.emsize,
+        args.nhead,
+        args.nhid,
+        args.nlayers,
+        args.bptt,
+        args.dropout,
     ).cuda()
     # ).to(device)
     print(model)
@@ -220,15 +231,15 @@ def main():
     bpttt={args.bptt}, dropout={args.dropout}
     """
     )
-    
+
     iter_to_capture = 1
-    
+
     # Loop over epochs.
     lr = args.lr
     best_val_loss = None
-    
+
     # At any point you can hit Ctrl + C to break out of training early.
-    
+
     with torch.autograd.profiler.emit_nvtx():
         for epoch in range(1, args.epochs + 1):
             epoch_start_time = time.time()
@@ -269,12 +280,15 @@ def main():
                     )
                     total_loss = 0
                     start_time = time.time()
-            val_loss = evaluate(val_data, args)
+            val_loss = evaluate(model, val_data, corpus, criterion, args)
             print("-" * 89)
             print(
                 "| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | "
                 "valid ppl {:8.2f}".format(
-                    epoch, (time.time() - epoch_start_time), val_loss, math.exp(val_loss)
+                    epoch,
+                    (time.time() - epoch_start_time),
+                    val_loss,
+                    math.exp(val_loss),
                 )
             )
             print("-" * 89)
@@ -284,9 +298,9 @@ def main():
             else:
                 # Anneal the learning rate if no improvement has been seen in the validation dataset.
                 lr /= 4.0
-    
+
     # Run on test data.
-    test_loss = evaluate(test_data)
+    test_loss = evaluate(model, test_data, corpus, criterion, args)
     print("=" * 89)
     print(
         "| End of training | test loss {:5.2f} | test ppl {:8.2f}".format(
