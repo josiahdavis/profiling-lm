@@ -1,4 +1,4 @@
 cxxfilt==0.2.1
-numpy==1.18.1
+numpy==1.22.0
 torch==1.4.0
 tqdm==4.43.0
